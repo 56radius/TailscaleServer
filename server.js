@@ -1,23 +1,28 @@
-// server.js
+const express = require('express');
+const http = require('http');
 const WebSocket = require('ws');
+const cors = require('cors');
 
 const PORT = process.env.PORT || 5050;
 
-const wss = new WebSocket.Server({ port: PORT });
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
 let clients = new Map(); // Map userId -> ws connection
 
-console.log(`WebSocket server running on ws://localhost:${PORT}`);
+console.log(`WebSocket server running on wss://your-app-name.onrender.com or ws://localhost:${PORT}`);
 
 wss.on('connection', (ws) => {
   let userId = null;
 
   ws.on('message', (message) => {
-    // Messages are expected as JSON strings
     try {
       const data = JSON.parse(message);
 
-      // First message should be { type: 'register', userId: '...' }
       if (data.type === 'register') {
         userId = data.userId;
         clients.set(userId, ws);
@@ -26,9 +31,7 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      // For sending chat message
       if (data.type === 'message') {
-        // data = { type: 'message', to: 'otherUserId', message: 'Hello', from: 'userId', timestamp: 123 }
         const recipientWs = clients.get(data.to);
         if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
           recipientWs.send(JSON.stringify({
@@ -39,7 +42,6 @@ wss.on('connection', (ws) => {
           }));
         } else {
           console.log(`User ${data.to} not connected`);
-          // Optional: buffer messages locally or notify sender
         }
       }
     } catch (err) {
@@ -53,4 +55,13 @@ wss.on('connection', (ws) => {
       console.log(`User disconnected: ${userId}`);
     }
   });
+});
+
+// Optional HTTP route to test if the server is alive
+app.get('/', (req, res) => {
+  res.send('WebSocket server is running!');
+});
+
+server.listen(PORT, () => {
+  console.log(`Server is listening on port ${PORT}`);
 });
