@@ -13,11 +13,8 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let clients = new Map(); // Map userId -> ws connection
-
-console.log(`WebSocket server running at:
-  - Local: ws://localhost:${PORT}
-  - Public (via Ngrok): wss://YOUR_NGROK_URL_HERE.ngrok-free.app`);
+// Map of connected clients: userId => WebSocket
+let clients = new Map();
 
 wss.on('connection', (ws) => {
   let userId = null;
@@ -29,7 +26,7 @@ wss.on('connection', (ws) => {
       if (data.type === 'register') {
         userId = data.userId;
         clients.set(userId, ws);
-        console.log(`User registered: ${userId}`);
+        console.log(`✅ User registered: ${userId}`);
         ws.send(JSON.stringify({ type: 'registered', userId }));
         return;
       }
@@ -44,23 +41,23 @@ wss.on('connection', (ws) => {
             timestamp: data.timestamp,
           }));
         } else {
-          console.log(`User ${data.to} not connected`);
+          console.log(`⚠️ User ${data.to} not connected`);
         }
       }
     } catch (err) {
-      console.error('Invalid JSON message:', err);
+      console.error('❌ Invalid JSON message:', err);
     }
   });
 
   ws.on('close', () => {
     if (userId) {
       clients.delete(userId);
-      console.log(`User disconnected: ${userId}`);
+      console.log(`👋 User disconnected: ${userId}`);
     }
   });
 });
 
-// Route to get IP addresses (useful for debugging)
+// Utility route to get public IPv4 addresses (including Tailscale)
 app.get('/get-ip', (req, res) => {
   const interfaces = os.networkInterfaces();
   const ips = [];
@@ -78,9 +75,11 @@ app.get('/get-ip', (req, res) => {
 
 // Basic status route
 app.get('/', (req, res) => {
-  res.send('WebSocket server is running!');
+  res.send('🚀 WebSocket server is running!');
 });
 
 server.listen(PORT, () => {
-  console.log(`Server is listening on port ${PORT}`);
+  console.log(`✅ Server is listening on port ${PORT}`);
+  console.log(`🌐 Access locally: ws://localhost:${PORT}`);
+  console.log(`🌐 Access via Ngrok: wss://3e32-102-89-23-157.ngrok-free.app`);
 });
