@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
+const os = require('os');
 
 const PORT = process.env.PORT || 5050;
 
@@ -14,7 +15,7 @@ const wss = new WebSocket.Server({ server });
 
 let clients = new Map(); // Map userId -> ws connection
 
-console.log(`WebSocket server running on wss://your-app-name.onrender.com or ws://localhost:${PORT}`);
+console.log(`WebSocket server running on wss://tailscaleserver.onrender.com or ws://localhost:${PORT}`);
 
 wss.on('connection', (ws) => {
   let userId = null;
@@ -55,6 +56,22 @@ wss.on('connection', (ws) => {
       console.log(`User disconnected: ${userId}`);
     }
   });
+});
+
+// Route to get IP addresses
+app.get('/get-ip', (req, res) => {
+  const interfaces = os.networkInterfaces();
+  const ips = [];
+
+  Object.keys(interfaces).forEach((name) => {
+    interfaces[name].forEach((iface) => {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        ips.push({ interface: name, address: iface.address });
+      }
+    });
+  });
+
+  res.json({ ips });
 });
 
 // Optional HTTP route to test if the server is alive
