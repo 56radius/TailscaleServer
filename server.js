@@ -15,7 +15,9 @@ const wss = new WebSocket.Server({ server });
 
 let clients = new Map(); // Map userId -> ws connection
 
-console.log(`WebSocket server running on wss://tailscaleserver.onrender.com or ws://localhost:${PORT}`);
+console.log(`WebSocket server running at:
+  - Local: ws://localhost:${PORT}
+  - Public (via Ngrok): wss://YOUR_NGROK_URL_HERE.ngrok-free.app`);
 
 wss.on('connection', (ws) => {
   let userId = null;
@@ -58,7 +60,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Route to get IP addresses
+// Route to get IP addresses (useful for debugging)
 app.get('/get-ip', (req, res) => {
   const interfaces = os.networkInterfaces();
   const ips = [];
@@ -74,7 +76,7 @@ app.get('/get-ip', (req, res) => {
   res.json({ ips });
 });
 
-// Optional HTTP route to test if the server is alive
+// Basic status route
 app.get('/', (req, res) => {
   res.send('WebSocket server is running!');
 });
