@@ -3,6 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const os = require('os');
+const { exec } = require('child_process');
 
 const PORT = process.env.PORT || 5050;
 
@@ -13,8 +14,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Map of connected clients: userId => WebSocket
-let clients = new Map();
+let clients = new Map(); // Map userId => ws connection
 
 wss.on('connection', (ws) => {
   let userId = null;
@@ -26,7 +26,7 @@ wss.on('connection', (ws) => {
       if (data.type === 'register') {
         userId = data.userId;
         clients.set(userId, ws);
-        console.log(`✅ User registered: ${userId}`);
+        console.log(`User registered: ${userId}`);
         ws.send(JSON.stringify({ type: 'registered', userId }));
         return;
       }
@@ -41,24 +41,24 @@ wss.on('connection', (ws) => {
             timestamp: data.timestamp,
           }));
         } else {
-          console.log(`⚠️ User ${data.to} not connected`);
+          console.log(`User ${data.to} not connected`);
         }
       }
     } catch (err) {
-      console.error('❌ Invalid JSON message:', err);
+      console.error('Invalid JSON message:', err);
     }
   });
 
   ws.on('close', () => {
     if (userId) {
       clients.delete(userId);
-      console.log(`👋 User disconnected: ${userId}`);
+      console.log(`User disconnected: ${userId}`);
     }
   });
 });
 
-// Utility route to get public IPv4 addresses (including Tailscale)
-app.get('/get-ip', (req, res) => {
+// Helper to get all server IPs (including tailscale)
+function getServerIps() {
   const interfaces = os.networkInterfaces();
   const ips = [];
 
@@ -70,16 +70,55 @@ app.get('/get-ip', (req, res) => {
     });
   });
 
-  res.json({ ips });
+  return ips;
+}
+
+// Get IPs endpoint — shows server IPs + client IP
+app.get('/get-ip', (req, res) => {
+  const serverIps = getServerIps();
+
+  // Get client IP address:
+  let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+
+  if (clientIp.includes(',')) {
+    clientIp = clientIp.split(',')[0].trim();
+  }
+
+  if (clientIp.startsWith('::ffff:')) {
+    clientIp = clientIp.replace('::ffff:', '');
+  }
+
+  res.json({
+    serverIps,
+    clientIp,
+  });
 });
 
-// Basic status route
+// ✅ Actual working ping endpoint
+app.get('/ping', (req, res) => {
+  const ip = req.query.ip;
+  if (!ip) {
+    return res.status(400).json({ success: false, message: 'Missing IP address' });
+  }
+
+  const platform = os.platform();
+  const pingCommand = platform === 'win32' ? `ping -n 1 ${ip}` : `ping -c 1 ${ip}`;
+
+  exec(pingCommand, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Ping failed: ${stderr}`);
+      return res.status(500).json({ success: false, message: 'Ping failed', error: stderr });
+    }
+
+    return res.json({ success: true, message: 'Ping successful', ip });
+  });
+});
+
 app.get('/', (req, res) => {
   res.send('🚀 WebSocket server is running!');
 });
 
 server.listen(PORT, () => {
-  console.log(`✅ Server is listening on port ${PORT}`);
-  console.log(`🌐 Access locally: ws://localhost:${PORT}`);
-  console.log(`🌐 Access via Ngrok: wss://3e32-102-89-23-157.ngrok-free.app`);
+  console.log(`✅ Server listening on port ${PORT}`);
+  console.log(`🌐 WebSocket endpoint ws://localhost:${PORT}`);
 });
