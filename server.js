@@ -14,7 +14,8 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let clients = new Map(); // Map userId => ws connection
+// Use Map of userId => { ws, tailscaleIp }
+let clients = new Map();
 
 wss.on('connection', (ws) => {
   let userId = null;
@@ -23,41 +24,60 @@ wss.on('connection', (ws) => {
     try {
       const data = JSON.parse(message);
 
+      // 📌 User registration
       if (data.type === 'register') {
         userId = data.userId;
-        clients.set(userId, ws);
-        console.log(`User registered: ${userId}`);
-        ws.send(JSON.stringify({ type: 'registered', userId }));
+        const tailscaleIp = data.tailscaleIp || 'N/A';
+
+        clients.set(userId, { ws, tailscaleIp });
+        console.log(`✅ User registered: ${userId} (Tailscale IP: ${tailscaleIp})`);
+
+        ws.send(JSON.stringify({ type: 'registered', userId, tailscaleIp }));
         return;
       }
 
+      // 💬 Handle chat messages
       if (data.type === 'message') {
-        const recipientWs = clients.get(data.to);
-        if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-          recipientWs.send(JSON.stringify({
+        const recipient = clients.get(data.to);
+        if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+          recipient.ws.send(JSON.stringify({
             type: 'message',
             from: data.from,
             message: data.message,
             timestamp: data.timestamp,
           }));
         } else {
-          console.log(`User ${data.to} not connected`);
+          console.log(`❌ User ${data.to} not connected`);
         }
+        return;
       }
+
+      // 🔄 WebRTC signaling
+      if (['offer', 'answer', 'ice-candidate'].includes(data.type)) {
+        const recipient = clients.get(data.to);
+        if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+          recipient.ws.send(JSON.stringify(data));
+          console.log(`📡 Signaling: ${data.type} from ${data.from} to ${data.to}`);
+        } else {
+          console.log(`❌ Peer ${data.to} not connected`);
+        }
+        return;
+      }
+
     } catch (err) {
-      console.error('Invalid JSON message:', err);
+      console.error('❌ Invalid JSON message:', err);
     }
   });
 
   ws.on('close', () => {
     if (userId) {
       clients.delete(userId);
-      console.log(`User disconnected: ${userId}`);
+      console.log(`🔌 User disconnected: ${userId}`);
     }
   });
 });
 
-// Helper to get all server IPs (including tailscale)
+// 🌐 Get all server IPs (including Tailscale)
 function getServerIps() {
   const interfaces = os.networkInterfaces();
   const ips = [];
@@ -73,28 +93,18 @@ function getServerIps() {
   return ips;
 }
 
-// Get IPs endpoint — shows server IPs + client IP
+// 📡 Endpoint to get IPs
 app.get('/get-ip', (req, res) => {
   const serverIps = getServerIps();
 
-  // Get client IP address:
   let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  if (clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim();
+  if (clientIp.startsWith('::ffff:')) clientIp = clientIp.replace('::ffff:', '');
 
-  if (clientIp.includes(',')) {
-    clientIp = clientIp.split(',')[0].trim();
-  }
-
-  if (clientIp.startsWith('::ffff:')) {
-    clientIp = clientIp.replace('::ffff:', '');
-  }
-
-  res.json({
-    serverIps,
-    clientIp,
-  });
+  res.json({ serverIps, clientIp });
 });
 
-// ✅ Actual working ping endpoint
+// 🔍 Endpoint to ping an IP (Tailscale check)
 app.get('/ping', (req, res) => {
   const ip = req.query.ip;
   if (!ip) {
@@ -114,10 +124,12 @@ app.get('/ping', (req, res) => {
   });
 });
 
+// 🌍 Root health check
 app.get('/', (req, res) => {
-  res.send('🚀 WebSocket server is running!');
+  res.send('🚀 WebSocket signaling server is running!');
 });
 
+// 🟢 Start server
 server.listen(PORT, () => {
   console.log(`✅ Server listening on port ${PORT}`);
   console.log(`🌐 WebSocket endpoint ws://localhost:${PORT}`);
