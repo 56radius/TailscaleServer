@@ -21,13 +21,15 @@ wss.on('connection', (ws) => {
   let userId = null;
 
   ws.on('message', (message) => {
+    console.log('Received message:', message); // Debug incoming messages
+
     try {
       const data = JSON.parse(message);
 
       // 📌 User registration
       if (data.type === 'register') {
         userId = data.userId;
-        const tailscaleIp = data.tailscaleIp || 'N/A';
+        const tailscaleIp = (data.tailscaleIP && data.tailscaleIP !== 'null') ? data.tailscaleIP : 'N/A';
 
         clients.set(userId, { ws, tailscaleIp });
         console.log(`✅ User registered: ${userId} (Tailscale IP: ${tailscaleIp})`);
