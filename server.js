@@ -26,13 +26,16 @@ wss.on('connection', (ws) => {
     try {
       const data = JSON.parse(stringMessage);
 
+      // 🐛 Add debug info
+      console.log('🔍 Parsed object:', data);
+      console.log('🔎 Type field:', data.type);
+
       // ✅ Registration
       if (data.type === 'register') {
         userId = data.userId;
         const tailscaleIp = data.tailscaleIP && data.tailscaleIP !== 'null' ? data.tailscaleIP : 'N/A';
 
         const existingClient = clients.get(userId);
-
         if (existingClient) {
           if (existingClient.ws.readyState === WebSocket.OPEN) {
             console.log(`⚠️ Duplicate registration attempt for userId: ${userId}`);
@@ -42,7 +45,6 @@ wss.on('connection', (ws) => {
             }));
             return;
           } else {
-            // Remove stale connection
             clients.delete(userId);
           }
         }
@@ -55,7 +57,7 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      // 💬 Regular chat message
+      // 💬 Message forwarding
       if (data.type === 'message') {
         console.log(`📩 Message from ${data.from} to ${data.to}: ${data.message}`);
 
@@ -87,7 +89,7 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      // 🔄 WebRTC signaling wrapper
+      // 🔄 WebRTC signaling
       if (data.type === 'webrtc-signal') {
         const { from, to, data: signalData } = data;
         const recipient = clients.get(to);
