@@ -30,8 +30,24 @@ wss.on('connection', (ws) => {
       if (data.type === 'register') {
         userId = data.userId;
         const tailscaleIp = data.tailscaleIP && data.tailscaleIP !== 'null' ? data.tailscaleIP : 'N/A';
-        clients.set(userId, { ws, tailscaleIp });
 
+        const existingClient = clients.get(userId);
+
+        if (existingClient) {
+          if (existingClient.ws.readyState === WebSocket.OPEN) {
+            console.log(`⚠️ Duplicate registration attempt for userId: ${userId}`);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `User "${userId}" is already registered.`,
+            }));
+            return;
+          } else {
+            // Remove stale connection
+            clients.delete(userId);
+          }
+        }
+
+        clients.set(userId, { ws, tailscaleIp });
         console.log(`✅ User registered: ${userId} (Tailscale IP: ${tailscaleIp})`);
         logConnectedUsers();
 
